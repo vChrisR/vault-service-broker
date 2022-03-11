@@ -14,6 +14,7 @@ import (
 
 	"github.com/hashicorp/vault/api"
 	"github.com/pivotal-cf/brokerapi"
+	"github.com/pivotal-cf/brokerapi/domain"
 	"github.com/pkg/errors"
 )
 
@@ -285,8 +286,7 @@ func (b *Broker) Stop() error {
 	b.running = false
 	return nil
 }
-
-func (b *Broker) Services(ctx context.Context) []brokerapi.Service {
+func (b *Broker) Services(ctx context.Context) ([]domain.Service, error) {
 	b.log.Printf("[INFO] listing services")
 	return []brokerapi.Service{
 		{
@@ -317,7 +317,7 @@ func (b *Broker) Services(ctx context.Context) []brokerapi.Service {
 				SupportUrl:          b.supportUrl,
 			},
 		},
-	}
+	}, nil
 }
 
 // Provision is used to setup a new instance of Vault tenant. For each
@@ -429,9 +429,17 @@ func (b *Broker) Deprovision(ctx context.Context, instanceID string, details bro
 	return spec, nil
 }
 
+func (b *Broker) GetBinding(ctx context.Context, instanceID, bindingID string) (domain.GetBindingSpec, error) {
+	return domain.GetBindingSpec{}, fmt.Errorf("Bindings are not retrievable")
+}
+
+func (b *Broker) GetInstance(ctx context.Context, instanceID string) (domain.GetInstanceDetailsSpec, error) {
+	return domain.GetInstanceDetailsSpec{}, fmt.Errorf("Instances are not retrievable")
+}
+
 // Bind is used to attach a tenant of Vault to an application in CloudFoundry.
 // This should create a credential that is used to authorize against Vault.
-func (b *Broker) Bind(ctx context.Context, instanceID, bindingID string, details brokerapi.BindDetails) (brokerapi.Binding, error) {
+func (b *Broker) Bind(ctx context.Context, instanceID, bindingID string, details brokerapi.BindDetails, asynchAllowed bool) (brokerapi.Binding, error) {
 	b.log.Printf("[INFO] binding service %s to instance %s",
 		bindingID, instanceID)
 
@@ -577,7 +585,7 @@ func (b *Broker) Bind(ctx context.Context, instanceID, bindingID string, details
 }
 
 // Unbind is used to detach an applicaiton from a tenant in Vault.
-func (b *Broker) Unbind(ctx context.Context, instanceID, bindingID string, details brokerapi.UnbindDetails) error {
+func (b *Broker) Unbind(ctx context.Context, instanceID, bindingID string, details domain.UnbindDetails, asyncAllowed bool) (domain.UnbindSpec, error) {
 	b.log.Printf("[INFO] unbinding service %s for instance %s",
 		bindingID, instanceID)
 
@@ -586,19 +594,19 @@ func (b *Broker) Unbind(ctx context.Context, instanceID, bindingID string, detai
 	b.log.Printf("[DEBUG] reading %s", path)
 	secret, err := b.vaultClient.Logical().Read(path)
 	if err != nil {
-		return b.wErrorf(err, "failed to read binding info for %s", path)
+		return domain.UnbindSpec{}, b.wErrorf(err, "failed to read binding info for %s", path)
 	}
 	if secret == nil || len(secret.Data) == 0 {
 		// The secret was already deleted previously, nothing further to do.
 		b.log.Printf("[WARN] secret appears to have been deleted previously, unbinding")
-		return b.deleteBinding(bindingID, path)
+		return domain.UnbindSpec{}, b.deleteBinding(bindingID, path)
 	}
 
 	// Decode the binding info
 	b.log.Printf("[DEBUG] decoding binding info for %s", path)
 	info, err := decodeBindingInfo(secret.Data)
 	if err != nil {
-		return b.wErrorf(err, "failed to decode binding info for %s", path)
+		return domain.UnbindSpec{}, b.wErrorf(err, "failed to decode binding info for %s", path)
 	}
 
 	// Revoke the token
@@ -608,11 +616,11 @@ func (b *Broker) Unbind(ctx context.Context, instanceID, bindingID string, detai
 		if strings.Contains(err.Error(), "invalid accessor") {
 			// The token has already been revoked or has expired.
 			b.log.Printf("[WARN] token has already been revoked or has expired, unbinding")
-			return b.deleteBinding(bindingID, path)
+			return domain.UnbindSpec{}, b.deleteBinding(bindingID, path)
 		}
-		return b.wErrorf(err, "failed to revoke accessor %s", a)
+		return domain.UnbindSpec{}, b.wErrorf(err, "failed to revoke accessor %s", a)
 	}
-	return b.deleteBinding(bindingID, path)
+	return domain.UnbindSpec{}, b.deleteBinding(bindingID, path)
 }
 
 func (b *Broker) deleteBinding(bindingID, path string) error {
@@ -636,6 +644,10 @@ func (b *Broker) deleteBinding(bindingID, path string) error {
 	return nil
 }
 
+func (b *Broker) LastBindingOperation(ctx context.Context, instanceID, bindingID string, details domain.PollDetails) (domain.LastOperation, error) {
+	return domain.LastOperation{}, nil
+}
+
 // Not implemented, only used for multiple plans
 func (b *Broker) Update(ctx context.Context, instanceID string, details brokerapi.UpdateDetails, async bool) (brokerapi.UpdateServiceSpec, error) {
 	b.log.Printf("[INFO] updating service for instance %s", instanceID)
@@ -643,7 +655,7 @@ func (b *Broker) Update(ctx context.Context, instanceID string, details brokerap
 }
 
 // Not implemented, only used for async
-func (b *Broker) LastOperation(ctx context.Context, instanceID, operationData string) (brokerapi.LastOperation, error) {
+func (b *Broker) LastOperation(ctx context.Context, instanceID string, details domain.PollDetails) (brokerapi.LastOperation, error) {
 	b.log.Printf("[INFO] returning last operation for instance %s", instanceID)
 	return brokerapi.LastOperation{}, nil
 }
