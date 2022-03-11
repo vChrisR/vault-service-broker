@@ -14,6 +14,7 @@ import (
 
 	"github.com/hashicorp/vault/api"
 	"github.com/pivotal-cf/brokerapi"
+	"github.com/pivotal-cf/brokerapi/domain"
 )
 
 func TestBroker_Start_Stop(t *testing.T) {
@@ -32,7 +33,7 @@ func TestBroker_Services(t *testing.T) {
 	env, closer := defaultEnvironment(t)
 	defer closer()
 
-	services := env.Broker.Services(env.Context)
+	services, _ := env.Broker.Services(env.Context)
 	if len(services) != 1 {
 		t.Fatalf("expected 1 service but received %d", len(services))
 	}
@@ -76,7 +77,7 @@ func TestBroker_Bind_Unbind(t *testing.T) {
 
 	binding, err := env.Broker.Bind(env.Context, env.InstanceID, env.BindingID, brokerapi.BindDetails{
 		AppGUID: "app-id",
-	})
+	}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +109,7 @@ func TestBroker_Bind_Unbind(t *testing.T) {
 		t.Fatalf("expected cf/space-guid/secret but received %s", sharedMap["space"])
 	}
 
-	if err := env.Broker.Unbind(env.Context, env.InstanceID, env.BindingID, brokerapi.UnbindDetails{}); err != nil {
+	if _, err := env.Broker.Unbind(env.Context, env.InstanceID, env.BindingID, brokerapi.UnbindDetails{}, false); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -124,7 +125,7 @@ func TestBroker_Bind_Unbind_No_Application_ID(t *testing.T) {
 		OrganizationGUID: "organization-guid",
 	}
 
-	binding, err := env.Broker.Bind(env.Context, env.InstanceID, env.BindingID, brokerapi.BindDetails{})
+	binding, err := env.Broker.Bind(env.Context, env.InstanceID, env.BindingID, brokerapi.BindDetails{}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -156,7 +157,7 @@ func TestBroker_Bind_Unbind_No_Application_ID(t *testing.T) {
 		t.Fatalf("expected cf/space-guid/secret but received %s", sharedMap["space"])
 	}
 
-	if err := env.Broker.Unbind(env.Context, env.InstanceID, env.BindingID, brokerapi.UnbindDetails{}); err != nil {
+	if _, err := env.Broker.Unbind(env.Context, env.InstanceID, env.BindingID, brokerapi.UnbindDetails{}, false); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -174,7 +175,7 @@ func TestBroker_Bind_Unbind_No_Access_Token(t *testing.T) {
 
 	binding, err := env.Broker.Bind(env.Context, env.InstanceID, env.BindingID, brokerapi.BindDetails{
 		AppGUID: "app-id",
-	})
+	}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -206,7 +207,7 @@ func TestBroker_Bind_Unbind_No_Access_Token(t *testing.T) {
 		t.Fatalf("expected cf/space-guid/secret but received %s", sharedMap["space"])
 	}
 
-	if err := env.Broker.Unbind(env.Context, env.InstanceID, "bad-accessor-test", brokerapi.UnbindDetails{}); err != nil {
+	if _, err := env.Broker.Unbind(env.Context, env.InstanceID, "bad-accessor-test", brokerapi.UnbindDetails{}, false); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -228,7 +229,7 @@ func TestBroker_LastOperation(t *testing.T) {
 	env, closer := defaultEnvironment(t)
 	defer closer()
 
-	lastOperation, err := env.Broker.LastOperation(env.Context, env.InstanceID, "")
+	lastOperation, err := env.Broker.LastOperation(env.Context, env.InstanceID, domain.PollDetails{})
 	if err != nil {
 		t.Fatal(err)
 	}
